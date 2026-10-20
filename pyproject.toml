@@ -1,0 +1,161 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faststrata-gateway"
+version = "7.0.0"
+description = "FastStrata's OpenAI-compatible gateway: parses Qwen XML tool calls, swaps FastStrata models on one card, supervises the LODESTAR memory protocol"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+
+# Core: what `python -m gateway` needs and nothing more. Upper bounds are set
+# at the next major because all four have broken APIs across majors before.
+#
+# The lower bound on fastapi says 0.109, not the 0.110 requirements.txt used to
+# claim: 0.109.0 is what has actually been running in production, so the old
+# declaration was never true and never checked.
+dependencies = [
+    "fastapi>=0.109,<1.0",
+    "uvicorn>=0.27,<1.0",
+    "httpx>=0.27,<1.0",
+    "json-repair>=0.30,<1.0",
+]
+
+[project.optional-dependencies]
+# The desktop app (tray + dashboard). requirements.txt omitted PySide6
+# entirely, so a fresh install could start the gateway but not the GUI that is
+# the documented way to run it.
+gui = ["PySide6>=6.6,<7.0"]
+# Enforcing `image_max_pixels`. Optional rather than required because the four
+# runtime dependencies above are deliberately the four the gateway needs, and
+# a rig serving no vision model never decodes an image. Without it an oversized
+# image is passed through and the gateway says so once, rather than failing.
+vision = ["Pillow>=10,<14"]
+
+# Semantic memory. The gateway shells out to `.context/semantic-memory/embed.py`
+# in every workspace and synthesizes calls to it, so these are a real
+# dependency of the running system even though nothing imports them here.
+memory = [
+    "sentence-transformers>=3.0",
+    "numpy>=1.26",
+]
+
+# Capped at the next major, so a resolver cannot pick a version nobody has
+# run the suite on.
+#
+# **The cap and requirements.lock contradicted each other for the length of one
+# release build.** Cutting v7.0.0 on 2026-09-13, pytest was raised to 9.1.1 to
+# clear PYSEC-2026-1845 and the whole suite re-run on it -- and this line still
+# said `<9.0`, with a comment claiming verification on 7.4. A reader following
+# the documented `pip install -e ".[dev]"` would have got pytest 8.x: the
+# vulnerable version, and not the one the release says it was verified on;
+# installing the lock beside it does not resolve at all.
+#
+# So the cap moves when the lock moves. `test_lock_matches_pyproject.py`
+# compares them, because two files stating one fact with nothing between them
+# is how this repository has been bitten repeatedly.
+dev = [
+    "pytest>=7.4,<10.0",
+    "pytest-cov>=4.1,<8.0",
+    "mypy>=1.8,<3.0",
+    "pip-audit>=2.7",
+]
+
+[project.scripts]
+faststrata-gateway = "gateway.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gateway*"]
+# Without the exclude, `pip install .` ships ~5500 lines of tests and their
+# fixtures into site-packages, and a `pytest` run in the target environment
+# collects them. S-2026-02.
+exclude = ["gateway.tests*", "gateway.lodestar.tests*"]
+
+[tool.setuptools.package-data]
+"gateway.prompts" = ["*.md", "VERSION"]
+
+[tool.pytest.ini_options]
+# Only the packaged unit tests are collected. `test_scripts/` holds standalone
+# diagnostic runners (argparse + main(), they need a live gateway) whose
+# functions look like pytest tests but take plain arguments, not fixtures —
+# collecting them made a bare `pytest` exit 1 with 8 collection errors.
+testpaths = ["gateway"]
+markers = [
+    "slow: loads the real sentence-transformers model (network check + ~60 s). Skip with -m \"not slow\" for the fast edit-test loop.",
+]
+norecursedirs = [
+    "test_scripts",
+    "scratch",
+    "OTHERS",
+    "REPORTS",
+    "LODESTAR_template",
+    ".context",
+    ".superpowers",
+    "docs",
+    "install",
+    "examples",
+]
+
+[tool.ruff]
+# The linter arrived on 2026-09-10, after an audit found R-2026-04 — a
+# parameter accepted, never read, with the prune limit passed into it at the
+# call site. That is ARG001, and a linter would have caught it for free
+# instead of costing an audit.
+target-version = "py312"
+extend-exclude = ["LODESTAR_template", "scratch", "OTHERS", "REPORTS"]
+
+[tool.ruff.lint]
+# Chosen to be at ZERO on this tree, so it can gate the pre-commit hook. A
+# linter that reports 1,300 findings is a linter nobody runs; one that reports
+# none today fails loudly the day something regresses.
+#
+# F   pyflakes — unused imports and variables, undefined names, broken
+#     f-strings. Every one of these is a defect or dead weight.
+# E4  import placement.  E7  bare except, lambda assignment, bad comparisons.
+# E9  syntax and IO errors.
+# B   bugbear — `raise` without `from` inside `except`, `zip()` without
+#     `strict`, unused loop variables.
+# ARG unused arguments. This is R-2026-04's rule and the reason for the file.
+select = ["F", "E4", "E7", "E9", "B", "ARG"]
+
+# NOT selected, each for a reason rather than by omission:
+#   E501 line-too-long — 888 findings. This repository documents its decisions
+#        in long prose comments and stores model-facing text as long strings;
+#        reflowing them would be the largest diff in its history and would
+#        improve nothing.
+#   W291/W293 trailing whitespace — 198 findings, all cosmetic. A
+#        whitespace-only commit across 40 files buries real history.
+#   SIM, UP — style and modernisation. Two SIM findings were genuine and are
+#        fixed; the other ~40 are taste, and taste in a gate is a tax.
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports are the entire job of these files.
+"__init__.py" = ["F401"]
+
+# These four import names they never call, under `_`-prefixed aliases, so that
+# ONE definition is shared instead of each module keeping its own copy. It is
+# not dead weight, it is an invariant with a test:
+# `gateway/lodestar/tests/test_tool_names.py` asserts
+# `state._READ_TOOLS is enforcer._READ_TOOLS is todo._READ_TOOLS is
+# tool_names.READ_TOOLS`, precisely so that a module re-defining the set
+# locally fails. F401 cannot tell that apart from a leftover; applying its fix
+# here removed 19 of them and broke three tests.
+"gateway/lodestar/state.py" = ["F401"]
+"gateway/lodestar/todo.py" = ["F401"]
+"gateway/lodestar/enforcer.py" = ["F401"]
+"gateway/app.py" = ["F401"]
+# Same pattern, plus placement: the re-export block sits MID-FILE with a
+# comment saying why, to avoid a circular import at module load.
+"gateway/normalizer.py" = ["F401", "E402"]
+# Imports the GUI symbols to prove they can be imported at all. That IS the
+# check; ruff suggests importlib.util.find_spec, which would test something
+# weaker (that a module is findable, not that its names exist).
+"test_scripts/verify_gui.py" = ["F401"]
+# Test doubles take the signature the real callable has, whether or not the
+# stub reads every argument. Enforcing ARG here would mean renaming arguments
+# to satisfy a linter that cannot see the interface being imitated.
+"gateway/tests/*" = ["ARG001", "ARG002", "ARG005"]
+"gateway/lodestar/tests/*" = ["ARG001", "ARG002", "ARG005"]
+"evals/*" = ["ARG001", "ARG002", "ARG005"]
+"test_scripts/*" = ["ARG001", "ARG002", "ARG005"]

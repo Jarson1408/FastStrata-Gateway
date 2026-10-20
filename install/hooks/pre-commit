@@ -1,0 +1,119 @@
+#!/bin/sh
+# Fast gate before every commit: the unit suite minus the model-loading tests,
+# then the LODESTAR behaviour scenarios. Together about six seconds.
+#
+# Install with:  python install/hooks/install_hooks.py
+# Skip once:     git commit --no-verify
+#
+# Deliberately NOT the full suite: the seven `slow` tests load
+# sentence-transformers and hit the network, which would turn every commit into
+# a half-minute wait and train everyone to pass --no-verify. Run
+# `python -m pytest -q` before pushing.
+
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/Scripts/python.exe" ]; then
+    PY="$VIRTUAL_ENV/Scripts/python.exe"
+elif [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
+    PY="$VIRTUAL_ENV/bin/python"
+elif command -v python >/dev/null 2>&1; then
+    PY=python
+else
+    PY=python3
+fi
+
+printf 'pre-commit: unit tests... '
+if ! out=$("$PY" -m pytest -q -m "not slow" 2>&1); then
+    printf '\n%s\n' "$out"
+    printf '\npre-commit: tests failed. Fix them, or commit with --no-verify.\n'
+    exit 1
+fi
+printf '%s\n' "$(printf '%s' "$out" | grep -Eo '[0-9]+ passed.*' | tail -1)"
+
+printf 'pre-commit: eval scenarios... '
+if ! out=$("$PY" evals/runner.py --no-history 2>&1); then
+    printf '\n%s\n' "$out"
+    printf '\npre-commit: a behaviour scenario regressed. Fix it, or commit with --no-verify.\n'
+    exit 1
+fi
+printf '%s\n' "$(printf '%s' "$out" | grep -Eo '[0-9]+/[0-9]+ scenarios passed.*' | tail -1)"
+
+# Types. Cheap (~3 s, no imports executed) and the scope is the whole package
+# since 2026-09-04 — before that it was gateway/lodestar only, and the ten
+# errors outside it went unnoticed until an audit ran mypy wider than the
+# command written in AGENTS.md. A check the documentation narrows is a check
+# nobody runs wide.
+printf 'pre-commit: types... '
+if ! out=$("$PY" -m mypy --config-file mypy.ini gateway 2>&1); then
+    printf '\n%s\n' "$out"
+    printf '\npre-commit: mypy failed. Fix it, or commit with --no-verify.\n'
+    exit 1
+fi
+printf '%s\n' "$(printf '%s' "$out" | grep -Eo 'Success.*' | tail -1)"
+
+# Lint. Arrived 2026-09-10, after an audit paid for R-2026-04 -- a parameter
+# accepted and never read, with the prune limit passed into it at the call
+# site. That is one ruff rule (ARG001). The selected set is deliberately the
+# one that sits at ZERO on this tree, so it can gate rather than nag; the
+# reasoning for every rule in and out of it is in pyproject.toml.
+#
+# Missing ruff is a WARNING, not a block: a fresh clone should not have its
+# first commit refused over a tool it has not installed yet.
+printf 'pre-commit: lint... '
+if ! "$PY" -m ruff --version >/dev/null 2>&1; then
+    printf 'ruff not installed - skipped (python -m pip install ruff)
+'
+elif ! out=$("$PY" -m ruff check gateway test_scripts evals install/release 2>&1); then
+    printf '
+%s
+' "$out"
+    printf '
+pre-commit: lint failed. Fix it, or commit with --no-verify.
+'
+    exit 1
+else
+    printf '%s
+' "$(printf '%s' "$out" | tail -1)"
+fi
+
+# A protocol change without a scenario is how evals/ went a month behind the
+# code it checks (T-2026-01): the rule lived only in AGENTS.md, and a rule
+# nothing enforces is a rule that lasts until someone is busy. A WARNING, not
+# a block — some lodestar edits genuinely need no scenario, and a gate that
+# cries wolf gets bypassed with --no-verify, taking the tests with it.
+if git diff --cached --name-only | grep -q '^gateway/lodestar/.*\.py$'; then
+    if ! git diff --cached --name-only | grep -q '^evals/scenarios/'; then
+        echo 'pre-commit: NOTE - this commit changes gateway/lodestar/ but adds no'
+        echo '            scenario in evals/scenarios/. If it fixes a protocol'
+        echo '            failure, record it there (AGENTS.md, "Behaviour scenarios").'
+    fi
+fi
+
+# Secrets. Unlike every other gate here this one is NOT about code quality and
+# NOT skippable on a fresh clone: it reads the STAGED content against
+# policy.NEVER_COMMIT -- keys, tokens, VPN profiles, Tailscale addresses.
+#
+# It exists because .context/MAC_CONNECTION.md sat tracked for 274 commits with
+# an SSH user, a key path, a Tailscale address and an employer's VPN network in
+# it. Nothing in that file was a credential, which is exactly why nobody
+# noticed: reading it did not feel like reading a secret, and the check that
+# would have said otherwise did not exist.
+#
+# The identity patterns are deliberately NOT here. This repository is allowed
+# to say where it runs; install/release/ is what removes that on the way out.
+printf 'pre-commit: secrets... '
+if ! out=$("$PY" install/release/check_staged_clean.py 2>&1); then
+    printf '
+%s
+' "$out"
+    printf '
+pre-commit: staged content must not enter git. Fix it -- and if you
+            bypass this one with --no-verify, rotate whatever it named.
+'
+    exit 1
+else
+    printf 'clean
+'
+fi

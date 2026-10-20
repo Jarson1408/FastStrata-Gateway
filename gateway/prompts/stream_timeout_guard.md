@@ -1,0 +1,1 @@
+[SYSTEM GUARD]: The generation step has reached the safety time limit. Any in-progress file write operation was halted to prevent data corruption. Please divide this task into smaller modular stages (e.g. write sections to separate files or create a summary table first) and proceed with the next stage.

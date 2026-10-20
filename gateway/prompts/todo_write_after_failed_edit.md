@@ -1,0 +1,1 @@
+Rewrite .context/memory/active-context.md with the write tool, providing the FULL updated file content (set Goal, Next Steps, Status=W toku). Do NOT retry the edit tool — your previous oldString did not match.

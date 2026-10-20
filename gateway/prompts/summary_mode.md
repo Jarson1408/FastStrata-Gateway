@@ -1,0 +1,1 @@
+CRITICAL: Do NOT use any tools, functions, or XML tags like <tool_call> in this response. Output ONLY the plain text summary.

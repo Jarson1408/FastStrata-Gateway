@@ -1,0 +1,13 @@
+# Runtime dependencies of `python -m gateway`.
+#
+# pyproject.toml is the source of truth — this file exists so `pip install -r`
+# keeps working. It cannot express the extras, and you need them:
+#
+#   pip install -e ".[gui,memory]"        gateway + desktop app + semantic memory
+#   pip install -e ".[gui,memory,dev]"    plus pytest
+#
+# requirements.lock pins the exact versions this release was verified against.
+fastapi>=0.109,<1.0
+uvicorn>=0.27,<1.0
+httpx>=0.27,<1.0
+json-repair>=0.30,<1.0

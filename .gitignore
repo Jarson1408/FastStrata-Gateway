@@ -1,0 +1,76 @@
+# Logs
+*.log
+proxy.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local secrets. LOCAL_LLM_GATEWAY_TOKEN in a .env is one `git add .`
+# away from the remote; no .env.example ships, because every variable has a
+# documented default in README.md and a second copy of that table would rot.
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test artifacts
+*.tmp
+test_output/
+
+# Temporary & Local files
+last_prompt.txt
+test.json
+test2.json
+qwen_manifest.json
+scratch/
+gateway_events.jsonl
+test_stream.json
+
+.superpowers/
+
+# Eval run history (local, append-only)
+evals/history.jsonl
+
+# Stray runtime logs (the rotating gateway.log / gateway_events.jsonl above
+# are the real ones; these are leftovers from ad-hoc runs)
+err.log
+proxy.err.log
+proxy_debug.log
+test_start.log
+*.err.log
+
+# Private VPN credentials
+*.ovpn
+
+# Gateway runtime artifacts (root-anchored: gateway/prompts/ is source)
+/spill/
+/prompts/
+engram-out/
+
+# Machine-specific access notes. Untracked from 2026-09-12, after sitting in
+# 274 commits with the SSH user, the key path, a Tailscale address and an
+# employer's VPN network in them. None of it was a credential, which is why it
+# went unnoticed for so long -- reading the file did not feel like reading a
+# secret. It stays ON DISK, because that is where its value is; it is only the
+# history of a repository with a remote that it has no business being in.
+# install/release/check_staged_clean.py refuses a commit that brings it back.
+.context/MAC_CONNECTION.md
+*.ovpn

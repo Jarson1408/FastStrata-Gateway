@@ -1,0 +1,1 @@
+CRITICAL WARNING: You have retried the same tool call with the same parameters multiple times and encountered errors. You are in a repeating retry loop. DO NOT repeat the exact same tool call or parameters. You must change your approach, use different tool parameters, check files first, or explain the obstacle to the user instead of looping.
