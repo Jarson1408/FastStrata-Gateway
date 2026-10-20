@@ -53,6 +53,11 @@ a reason, as any unknown engine is.
   and lists the id. Found by running the gateway against C:/tools/PolyStrata:
   every model came back `installed: false`. The Ollama-era
   `local-coder:35b-a3b` it always added is gone too.
+- The desktop app writes gui.log beside the gateway when it has no console
+  (pythonw, the shortcut setup makes): on the first trial install it started
+  the model and was gone a minute later with nothing on disk saying why. Its
+  single-instance name is its own: with Local-LLM-Gateway's app running, the
+  shortcut found that app, asked it to show itself and quit.
 - The launchers find their own folder instead of `C:\tools\Local-LLM-Gateway`.
 
 **Kept:** LODESTAR, on by default, with its switch. The eGPU preset survives as
@@ -60,7 +65,7 @@ a test fixture (`gateway/tests/_rig_presets.py`, ExLlamaV3 as `remote`, where
 discovery wins as it did), so the window, discovery and Gemma tests keep the
 data they were measured on.
 
-Verified: pytest 2006 passed, 1 skipped; `evals/runner.py` 25/25; mypy clean on
+Verified: pytest 2015 passed, 1 skipped; `evals/runner.py` 25/25; mypy clean on
 `gateway/lodestar` and `gateway`; ruff clean.
 
 ### The PolyStrata fork: Qwen3.6 on a 6 GB laptop card (2026-10-14 … 10-18)

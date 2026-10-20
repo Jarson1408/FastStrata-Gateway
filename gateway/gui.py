@@ -39,7 +39,36 @@ from gateway.session_report import (
     build_sessions, format_session, read_events,
 )
 
-logging.basicConfig(level=logging.INFO)
+#: Where the app writes what it would print, when it has no console.
+GUI_LOG = Path(__file__).resolve().parent.parent / "gui.log"
+GUI_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def log_to_file_when_windowless(path: Path = GUI_LOG) -> bool:
+    """Under pythonw -- the desktop shortcut FastStrata's setup makes -- stdout and stderr are None, so a log line
+    and the traceback of an error that ends the app go nowhere: on 2026-10-20 the app started the model and was gone
+    a minute later, and nothing on disk said why. Then both go to gui.log beside the gateway (the one before it kept
+    as gui.log.1 past 5 MB), and an uncaught exception is logged with its traceback. True when it did that."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return False
+    try:
+        if path.is_file() and path.stat().st_size > GUI_LOG_MAX_BYTES:
+            os.replace(path, path.with_name(path.name + ".1"))
+        f = open(path, "a", encoding="utf-8", buffering=1)
+    except OSError:
+        return False
+    sys.stdout = sys.stderr = f
+
+    def log_uncaught(kind, value, tb):
+        logging.getLogger("gateway.gui").critical("uncaught error", exc_info=(kind, value, tb))
+
+    sys.excepthook = log_uncaught
+    threading.excepthook = lambda args: log_uncaught(args.exc_type, args.exc_value, args.exc_traceback)
+    return True
+
+
+log_to_file_when_windowless()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 _log = logging.getLogger("gateway.gui")
 
 # Obsidian Flux Premium Stylesheet
@@ -1798,7 +1827,9 @@ def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
-    server_name = "local_llm_gateway_gui_single_instance"
+    # Its own name: Local-LLM-Gateway's app used the same one, so with that app running the shortcut found it,
+    # asked IT to show itself and quit.
+    server_name = "faststrata_gateway_gui_single_instance"
     socket = QLocalSocket()
     socket.connectToServer(server_name)
     if socket.waitForConnected(500):
