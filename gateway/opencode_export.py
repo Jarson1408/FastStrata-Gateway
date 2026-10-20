@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -314,7 +315,13 @@ def write_export(specs: Iterable[ModelSpec], port: int,
     if target.is_file():
         loaded, _ = load_jsonc(target)
         data = loaded or {}
+        # `.bak`, or `.bak-<date>-<time>` where a `.bak` is already there: a
+        # backup somebody kept by hand (`opencode.json.bak` from months ago)
+        # is theirs, and an export that replaced it would lose the one copy
+        # of the config it was kept for.
         backup = target.with_suffix(target.suffix + ".bak")
+        if backup.exists():
+            backup = target.with_suffix(target.suffix + time.strftime(".bak-%Y%m%d-%H%M%S"))
         try:
             backup.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
         except OSError as exc:
