@@ -337,3 +337,62 @@ def write_export(specs: Iterable[ModelSpec], port: int,
 
     _log.info("Exported %d model(s) to %s", len(specs), target)
     return ExportResult(path=target, backup=backup, models=[s.id for s in specs])
+
+
+# ---------------------------------------------------------------------------
+# From the command line: what FastStrata's setup runs
+# ---------------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m gateway.opencode_export [--write] [--drop-comments]`.
+
+    The same export as the desktop app's button, for FastStrata's setup to run
+    after it has written the models into settings.json. Prints one JSON object
+    saying what would change (or what did), so the caller reads an answer
+    rather than parsing prose.
+
+    With no OpenCode config anywhere, the export CREATES
+    `~/.config/opencode/opencode.json` -- a new install is the case this exists
+    for. A `.jsonc` with comments is the one thing it will not do silently: it
+    stops with exit code 3 and writes nothing, because a JSON round trip drops
+    every comment (see the module docstring); `--drop-comments` is the caller
+    having asked the user. Exit 0: done or nothing to do; 1: an error; 3: the
+    comments.
+    """
+    import argparse
+
+    from gateway.config import GatewayConfig
+
+    ap = argparse.ArgumentParser(prog="python -m gateway.opencode_export",
+                                 description="Write the gateway's models into OpenCode's config.")
+    ap.add_argument("--write", action="store_true",
+                    help="write the model list (default: only say what would change)")
+    ap.add_argument("--drop-comments", action="store_true",
+                    help="write a .jsonc even though its comments are lost (a .bak keeps them)")
+    a = ap.parse_args(argv)
+
+    config = GatewayConfig.from_env()
+    specs = config.registry().specs
+    path = pick_config_path() or candidate_paths()[-1]
+    plan = plan_export(specs, path=path)
+    summary: dict[str, Any] = {"path": str(plan.path), "exists": plan.exists,
+                               "comments": plan.comments, "models": plan.models,
+                               "removed": plan.removed, "written": False,
+                               "backup": None, "error": plan.error}
+    code = 0 if plan.ok else 1
+    if a.write and plan.ok:
+        if plan.comments and not a.drop_comments:
+            summary["error"] = (f"{plan.path} has {plan.comments} comment(s) that writing "
+                                "would delete; nothing was written")
+            code = 3
+        else:
+            result = write_export(specs, config.port, path=plan.path)
+            summary.update(written=result.ok, error=result.error,
+                           backup=str(result.backup) if result.backup else None)
+            code = 0 if result.ok else 1
+    print(json.dumps(summary, ensure_ascii=False))
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
