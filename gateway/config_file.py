@@ -150,7 +150,7 @@ DEFAULT_PRESETS: dict[str, dict[str, Any]] = {
             "ornith": "ornith-1.5-35b-a3b",
             "ornith-1.5": "ornith-1.5-35b-a3b",
         },
-        "lodestar_enabled": True,
+        "lodestar_enabled": False,   # FastStrata: off at the start, the switch turns it on
         "models": [
             _faststrata_model("qwen3.6-35b-a3b", "Qwen3.6 35B-A3B UD-Q4_K_M",
                               "strata-qwen36-ud-q4_k_m.json", 147456, 16384),

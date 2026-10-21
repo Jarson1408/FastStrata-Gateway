@@ -929,7 +929,7 @@ class MainWindow(QMainWindow):
         form_layout.addLayout(models_row)
 
         # Checkboxes (Toggles)
-        self.chk_lodestar = QCheckBox("Enforce LODESTAR Memory Protocol (default: enabled)")
+        self.chk_lodestar = QCheckBox("Enforce LODESTAR Memory Protocol (default: off)")
         form_layout.addWidget(self.chk_lodestar)
 
         self.chk_autostart = QCheckBox("Start automatically on Windows boot (adds Startup shortcut)")
@@ -1226,7 +1226,7 @@ class MainWindow(QMainWindow):
         self._models = active_models()
         self._refresh_models_table()
 
-        self._sync_lodestar_ui(settings.get("lodestar_enabled", True))
+        self._sync_lodestar_ui(settings.get("lodestar_enabled", False))
         self.chk_autostart.setChecked(get_startup_shortcut_path().is_file())
 
         self.lbl_port_indicator.setText(f"PORT: {self.txt_port.text()}")
@@ -1273,7 +1273,7 @@ class MainWindow(QMainWindow):
         self._models = [dict(m) for m in (data.get("models") or [])
                         if isinstance(m, dict)]
         self._refresh_models_table()
-        self._sync_lodestar_ui(bool(data.get("lodestar_enabled", True)))
+        self._sync_lodestar_ui(bool(data.get("lodestar_enabled", False)))
         self.lbl_port_indicator.setText(f"PORT: {self.txt_port.text()}")
 
     def _on_save_as_preset(self):
@@ -1913,7 +1913,7 @@ def main():
     action_lodestar = menu.addAction("🧠 LODESTAR Protocol")
     action_lodestar.setCheckable(True)
     settings = load_settings_from_file()
-    action_lodestar.setChecked(settings.get("lodestar_enabled", True))
+    action_lodestar.setChecked(settings.get("lodestar_enabled", False))
     window.tray_lodestar_action = action_lodestar
     action_lodestar.triggered.connect(
         lambda checked: window.set_lodestar_enabled(checked))

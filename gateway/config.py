@@ -628,7 +628,7 @@ class GatewayConfig:
         upstream_default = file_settings.get("upstream", "http://127.0.0.1:8080")
         port_default = file_settings.get("port", 18000)
         reserve_default = file_settings.get("context_reserve", 16384)
-        lodestar_enabled_default = file_settings.get("lodestar_enabled", True)
+        lodestar_enabled_default = file_settings.get("lodestar_enabled", False)
         model_aliases_default = file_settings.get("model_aliases", dict(DEFAULT_MODEL_ALIASES))
 
         allowlist_default = file_settings.get(
