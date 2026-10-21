@@ -31,6 +31,7 @@ forever. Those responses are small, so exempting them costs nothing.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import time
@@ -255,6 +256,21 @@ def _exempt(content: str, tool_name: str = "") -> bool:
     )
 
 
+def _reads_a_spill(arguments: object, root: Path) -> bool:
+    """True when a tool call's arguments name a file in the spill store: the model is reading back a result the
+    gateway spilled, as the preview tells it to. Spilling that read as well hands it the same preview again, and it
+    reads the file again until a loop guard stops it -- seen 2026-10-21 on FastStrata: an 8 KB main.js read, spilled,
+    its spill file read three times, each time spilled to the same preview, and the turn ended with the model never
+    having seen the file. Matched on the store's folder in the arguments, slashes either way, any case."""
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, ensure_ascii=False) if arguments else ""
+
+    def norm(text: str) -> str:
+        return text.replace("\\\\", "/").replace("\\", "/").lower()
+
+    return bool(arguments) and norm(str(root)) in norm(arguments)
+
+
 def apply_spill_policy(
     messages: list[dict],
     max_inline_bytes: int,
@@ -272,8 +288,9 @@ def apply_spill_policy(
     if max_inline_bytes <= 0 or not messages:
         return messages, 0
 
-    # Build lookup of tool_call_id -> function name from assistant messages
+    # Build lookup of tool_call_id -> function name (and arguments) from assistant messages
     call_names: dict[str, str] = {}
+    call_args: dict[str, object] = {}
     for m in messages:
         if m.get("role") == "assistant":
             for tc in m.get("tool_calls") or []:
@@ -281,6 +298,8 @@ def apply_spill_policy(
                 fn_name = (tc.get("function") or {}).get("name")
                 if c_id and fn_name:
                     call_names[c_id] = fn_name
+                if c_id:
+                    call_args[c_id] = (tc.get("function") or {}).get("arguments")
 
     out: list[dict] = []
     spilled = 0
@@ -296,7 +315,7 @@ def apply_spill_policy(
             continue
 
         tool_name = msg.get("name") or call_names.get(msg.get("tool_call_id", ""), "")
-        if _exempt(content, tool_name):
+        if _exempt(content, tool_name) or _reads_a_spill(call_args.get(msg.get("tool_call_id", "")), store.root):
             out.append(msg)
             continue
 
